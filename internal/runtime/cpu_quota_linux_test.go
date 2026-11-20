@@ -126,6 +126,10 @@ func (tq testQueryer) CPUQuota() (float64, bool, error) {
 	return tq.v, true, nil
 }
 
+func (tq testQueryer) CPUQuotaAndPeriod() (int64, int64, bool, error) {
+	return int64(tq.v * 100000), 100000, true, nil
+}
+
 func newStubs(t *testing.T) *gostub.Stubs {
 	stubs := gostub.New()
 	t.Cleanup(stubs.Reset)

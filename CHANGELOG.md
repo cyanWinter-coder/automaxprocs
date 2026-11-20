@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add `maxprocs.Watch`, a stoppable watcher that periodically re-reads the
+  cgroup CPU quota and updates GOMAXPROCS when the platform resizes the
+  container. Updates only apply after consecutive stable samples that exceed
+  a hysteresis threshold; failed reads keep the last known good value and
+  report a stale state instead of being treated as unlimited CPU.
+
 ## v1.6.0 (2024-07-24)
 
 - Add RoundQuotaFunc option that allows configuration of rounding

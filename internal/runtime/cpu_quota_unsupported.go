@@ -29,3 +29,10 @@ package runtime
 func CPUQuotaToGOMAXPROCS(_ int, _ func(v float64) int) (int, CPUQuotaStatus, error) {
 	return -1, CPUQuotaUndefined, nil
 }
+
+// CgroupCPUQuotaAndPeriod reads the raw CPU quota and period applied to the
+// calling process. This is Linux-specific and not supported in the current
+// OS, so it always reports an undefined quota.
+func CgroupCPUQuotaAndPeriod() (quota, period int64, defined bool, err error) {
+	return -1, -1, false, nil
+}

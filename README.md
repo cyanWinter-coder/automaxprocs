@@ -16,6 +16,30 @@ func main() {
 }
 ```
 
+## Reacting to CPU quota changes
+
+`Set` reads the CPU quota once at startup. If the platform can resize the
+container while the process is running, use `Watch` instead: it periodically
+re-reads the cgroup quota and updates `GOMAXPROCS` to follow it.
+
+```go
+watcher := maxprocs.Watch(context.Background())
+defer watcher.Stop()
+```
+
+To avoid reacting to a single noisy reading, a new value is only applied
+after consecutive stable samples that clear a hysteresis threshold. A failed
+quota read never resets `GOMAXPROCS`: the last known good value is kept and
+`watcher.Stale()` reports that it is based on an older reading. On `Stop`,
+the original `GOMAXPROCS` is restored only if the current value was applied
+by the watcher, so changes made by other code are preserved. `Stop` is
+idempotent.
+
+The `GOMAXPROCS` environment variable, `Min`, and `RoundQuotaFunc` keep the
+same semantics as `Set`. The polling interval can be changed with
+`RefreshInterval`, and the quota source can be injected with `QuotaSource`
+(for tests or non-standard platforms).
+
 # Performance
 Data measured from Uber's internal load balancer. We ran the load balancer with 200% CPU quota (i.e., 2 cores):
 

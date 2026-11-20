@@ -126,12 +126,24 @@ func isCGroupV2(procPathMountInfo string) (bool, error) {
 // It will return `cpu.max / cpu.period`. If cpu.max is set to max, it returns
 // (-1, false, nil)
 func (cg *CGroups2) CPUQuota() (float64, bool, error) {
+	quota, period, defined, err := cg.CPUQuotaAndPeriod()
+	if !defined || err != nil {
+		return -1, defined, err
+	}
+	return float64(quota) / float64(period), true, nil
+}
+
+// CPUQuotaAndPeriod reads the raw cpu.max quota and period (both in
+// microseconds) from the `cpu.max` file. If cpu.max is set to "max", no quota
+// is enforced and defined is false. A read or parse failure is returned as an
+// error and must never be interpreted as an unlimited quota.
+func (cg *CGroups2) CPUQuotaAndPeriod() (quota, period int64, defined bool, err error) {
 	cpuMaxParams, err := os.Open(path.Join(cg.mountPoint, cg.groupPath, cg.cpuMaxFile))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return -1, false, nil
+			return -1, -1, false, nil
 		}
-		return -1, false, err
+		return -1, -1, false, err
 	}
 	defer cpuMaxParams.Close()
 
@@ -139,38 +151,38 @@ func (cg *CGroups2) CPUQuota() (float64, bool, error) {
 	if scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) == 0 || len(fields) > 2 {
-			return -1, false, fmt.Errorf("invalid format")
+			return -1, -1, false, fmt.Errorf("invalid format")
 		}
 
 		if fields[_cgroupv2CPUMaxQuotaIndex] == _cgroupV2CPUMaxQuotaMax {
-			return -1, false, nil
+			return -1, -1, false, nil
 		}
 
 		max, err := strconv.Atoi(fields[_cgroupv2CPUMaxQuotaIndex])
 		if err != nil {
-			return -1, false, err
+			return -1, -1, false, err
 		}
 
-		var period int
+		var p int
 		if len(fields) == 1 {
-			period = _cgroupV2CPUMaxDefaultPeriod
+			p = _cgroupV2CPUMaxDefaultPeriod
 		} else {
-			period, err = strconv.Atoi(fields[_cgroupv2CPUMaxPeriodIndex])
+			p, err = strconv.Atoi(fields[_cgroupv2CPUMaxPeriodIndex])
 			if err != nil {
-				return -1, false, err
+				return int64(max), -1, false, err
 			}
 
-			if period == 0 {
-				return -1, false, errors.New("zero value for period is not allowed")
+			if p == 0 {
+				return int64(max), 0, false, errors.New("zero value for period is not allowed")
 			}
 		}
 
-		return float64(max) / float64(period), true, nil
+		return int64(max), int64(p), true, nil
 	}
 
 	if err := scanner.Err(); err != nil {
-		return -1, false, err
+		return -1, -1, false, err
 	}
 
-	return 0, false, io.ErrUnexpectedEOF
+	return 0, -1, false, io.ErrUnexpectedEOF
 }

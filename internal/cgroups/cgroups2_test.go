@@ -194,6 +194,88 @@ func TestCGroup2GroupPathDiscovery_Errors(t *testing.T) {
 	})
 }
 
+func TestCGroupsCPUQuotaV2AndPeriod(t *testing.T) {
+	tests := []struct {
+		name       string
+		wantQuota  int64
+		wantPeriod int64
+		wantOK     bool
+		wantErr    string
+	}{
+		{
+			name:       "set",
+			wantQuota:  250000,
+			wantPeriod: 100000,
+			wantOK:     true,
+		},
+		{
+			// "max" means unlimited: not defined, but not an error.
+			name:       "unset",
+			wantQuota:  -1,
+			wantPeriod: -1,
+			wantOK:     false,
+		},
+		{
+			name:       "only-max",
+			wantQuota:  500000,
+			wantPeriod: _cgroupV2CPUMaxDefaultPeriod,
+			wantOK:     true,
+		},
+		{
+			name:    "invalid-max",
+			wantErr: `parsing "asdf": invalid syntax`,
+		},
+		{
+			name:    "invalid-period",
+			wantErr: `parsing "njn": invalid syntax`,
+		},
+		{
+			name:       "nonexistent",
+			wantQuota:  -1,
+			wantPeriod: -1,
+			wantOK:     false,
+		},
+		{
+			name:    "empty",
+			wantErr: "unexpected EOF",
+		},
+		{
+			name:    "too-few-fields",
+			wantErr: "invalid format",
+		},
+		{
+			name:    "too-many-fields",
+			wantErr: "invalid format",
+		},
+		{
+			name:    "zero-period",
+			wantErr: "zero value for period is not allowed",
+		},
+	}
+
+	mountPoint := filepath.Join(testDataCGroupsPath, "v2")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			quota, period, defined, err := (&CGroups2{
+				mountPoint: mountPoint,
+				groupPath:  "/",
+				cpuMaxFile: tt.name,
+			}).CPUQuotaAndPeriod()
+
+			if len(tt.wantErr) > 0 {
+				require.Error(t, err, tt.name)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.False(t, defined, tt.name)
+			} else {
+				require.NoError(t, err, tt.name)
+				assert.Equal(t, tt.wantQuota, quota, tt.name)
+				assert.Equal(t, tt.wantPeriod, period, tt.name)
+				assert.Equal(t, tt.wantOK, defined, tt.name)
+			}
+		})
+	}
+}
+
 func TestCGroupsCPUQuotaV2_OtherErrors(t *testing.T) {
 	t.Run("no permissions to open", func(t *testing.T) {
 		if u, err := user.Current(); err == nil && u.Uid == "0" {
@@ -207,7 +289,7 @@ func TestCGroupsCPUQuotaV2_OtherErrors(t *testing.T) {
 		mountPoint := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(mountPoint, name), nil /* write only*/, 0222))
 
-		_, _, err := (&CGroups2{mountPoint: mountPoint, groupPath: "/", cpuMaxFile: name}).CPUQuota()
+		_, _, _, err := (&CGroups2{mountPoint: mountPoint, groupPath: "/", cpuMaxFile: name}).CPUQuotaAndPeriod()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "permission denied")
 	})

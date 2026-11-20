@@ -99,20 +99,33 @@ func NewCGroupsForCurrentProcess() (CGroups, error) {
 // It is a result of `cpu.cfs_quota_us / cpu.cfs_period_us`. If the value of
 // `cpu.cfs_quota_us` was not set (-1), the method returns `(-1, nil)`.
 func (cg CGroups) CPUQuota() (float64, bool, error) {
+	quota, period, defined, err := cg.CPUQuotaAndPeriod()
+	if !defined || err != nil {
+		return -1, defined, err
+	}
+	return float64(quota) / float64(period), true, nil
+}
+
+// CPUQuotaAndPeriod returns the raw CFS quota and period (both in
+// microseconds) applied with the CPU cgroup controller by reading
+// `cpu.cfs_quota_us` and `cpu.cfs_period_us` separately. If no CPU quota is
+// configured, defined is false. A read or parse failure is returned as an
+// error and must never be interpreted as an unlimited quota.
+func (cg CGroups) CPUQuotaAndPeriod() (quota, period int64, defined bool, err error) {
 	cpuCGroup, exists := cg[_cgroupSubsysCPU]
 	if !exists {
-		return -1, false, nil
+		return -1, -1, false, nil
 	}
 
 	cfsQuotaUs, err := cpuCGroup.readInt(_cgroupCPUCFSQuotaUsParam)
 	if defined := cfsQuotaUs > 0; err != nil || !defined {
-		return -1, defined, err
+		return int64(cfsQuotaUs), -1, defined, err
 	}
 
 	cfsPeriodUs, err := cpuCGroup.readInt(_cgroupCPUCFSPeriodUsParam)
 	if defined := cfsPeriodUs > 0; err != nil || !defined {
-		return -1, defined, err
+		return int64(cfsQuotaUs), int64(cfsPeriodUs), defined, err
 	}
 
-	return float64(cfsQuotaUs) / float64(cfsPeriodUs), true, nil
+	return int64(cfsQuotaUs), int64(cfsPeriodUs), true, nil
 }

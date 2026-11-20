@@ -138,3 +138,64 @@ func TestCGroupsCPUQuota(t *testing.T) {
 		}
 	}
 }
+
+func TestCGroupsCPUQuotaAndPeriod(t *testing.T) {
+	testTable := []struct {
+		name            string
+		expectedQuota   int64
+		expectedPeriod  int64
+		expectedDefined bool
+		shouldHaveError bool
+	}{
+		{
+			name:            "cpu",
+			expectedQuota:   600000,
+			expectedPeriod:  100000,
+			expectedDefined: true,
+		},
+		{
+			// quota set to -1 means unlimited, which is "not defined",
+			// not an error.
+			name:            "undefined",
+			expectedQuota:   -1,
+			expectedPeriod:  -1,
+			expectedDefined: false,
+		},
+		{
+			name:            "zero-period",
+			expectedQuota:   600000,
+			expectedPeriod:  0,
+			expectedDefined: false,
+		},
+		{
+			name:            "undefined-period",
+			expectedQuota:   800000,
+			expectedDefined: false,
+			shouldHaveError: true,
+		},
+	}
+
+	cgroups := make(CGroups)
+
+	quota, period, defined, err := cgroups.CPUQuotaAndPeriod()
+	assert.Equal(t, int64(-1), quota, "nonexistent")
+	assert.Equal(t, int64(-1), period, "nonexistent")
+	assert.False(t, defined, "nonexistent")
+	assert.NoError(t, err, "nonexistent")
+
+	for _, tt := range testTable {
+		cgroupPath := filepath.Join(testDataCGroupsPath, tt.name)
+		cgroups[_cgroupSubsysCPU] = NewCGroup(cgroupPath)
+
+		quota, period, defined, err := cgroups.CPUQuotaAndPeriod()
+		assert.Equal(t, tt.expectedQuota, quota, tt.name)
+		assert.Equal(t, tt.expectedPeriod, period, tt.name)
+		assert.Equal(t, tt.expectedDefined, defined, tt.name)
+
+		if tt.shouldHaveError {
+			assert.Error(t, err, tt.name)
+		} else {
+			assert.NoError(t, err, tt.name)
+		}
+	}
+}

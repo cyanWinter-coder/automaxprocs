@@ -57,6 +57,30 @@ type queryer interface {
 	CPUQuota() (float64, bool, error)
 }
 
+// cgroupQuotaQueryer is implemented by cgroup queryers that expose the raw
+// CFS quota and period instead of only their ratio.
+type cgroupQuotaQueryer interface {
+	CPUQuotaAndPeriod() (quota, period int64, defined bool, err error)
+}
+
+// CgroupCPUQuotaAndPeriod reads the raw CPU quota and period (both in
+// microseconds) applied to the calling process. It lets callers distinguish a
+// failed read (err != nil) from a cgroup with no enforced quota
+// (defined == false, nil error), so a transient error can never be mistaken
+// for unlimited CPU.
+func CgroupCPUQuotaAndPeriod() (quota, period int64, defined bool, err error) {
+	cgroups, err := _newQueryer()
+	if err != nil {
+		return -1, -1, false, err
+	}
+
+	q, ok := cgroups.(cgroupQuotaQueryer)
+	if !ok {
+		return -1, -1, false, nil
+	}
+	return q.CPUQuotaAndPeriod()
+}
+
 var (
 	_newCgroups2 = cg.NewCGroups2ForCurrentProcess
 	_newCgroups  = cg.NewCGroupsForCurrentProcess

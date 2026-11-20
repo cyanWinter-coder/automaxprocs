@@ -21,6 +21,7 @@
 package maxprocs_test
 
 import (
+	"context"
 	"log"
 
 	"go.uber.org/automaxprocs/maxprocs"
@@ -43,4 +44,14 @@ func ExampleLogger() {
 	if err != nil {
 		log.Fatalf("failed to set GOMAXPROCS: %v", err)
 	}
+}
+
+func ExampleWatch() {
+	// Watch keeps GOMAXPROCS in sync when the container CPU quota is
+	// adjusted at runtime, instead of only reading it once like Set.
+	watcher := maxprocs.Watch(
+		context.Background(),
+		maxprocs.Logger(log.Printf),
+	)
+	defer watcher.Stop()
 }

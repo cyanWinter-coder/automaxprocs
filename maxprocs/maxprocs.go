@@ -26,6 +26,7 @@ package maxprocs // import "go.uber.org/automaxprocs/maxprocs"
 import (
 	"os"
 	"runtime"
+	"time"
 
 	iruntime "go.uber.org/automaxprocs/internal/runtime"
 )
@@ -41,12 +42,28 @@ type config struct {
 	procs          func(int, func(v float64) int) (int, iruntime.CPUQuotaStatus, error)
 	minGOMAXPROCS  int
 	roundQuotaFunc func(v float64) int
+	quotaSource    CPUQuotaSource
+	refresh        time.Duration
 }
 
 func (c *config) log(fmt string, args ...interface{}) {
 	if c.printf != nil {
 		c.printf(fmt, args...)
 	}
+}
+
+func newConfig(opts []Option) *config {
+	cfg := &config{
+		procs:          iruntime.CPUQuotaToGOMAXPROCS,
+		roundQuotaFunc: iruntime.DefaultRoundFunc,
+		minGOMAXPROCS:  1,
+		quotaSource:    defaultQuotaSource{},
+		refresh:        defaultRefreshInterval,
+	}
+	for _, o := range opts {
+		o.apply(cfg)
+	}
+	return cfg
 }
 
 // An Option alters the behavior of Set.
@@ -89,14 +106,7 @@ func (of optionFunc) apply(cfg *config) { of(cfg) }
 // Set is a no-op on non-Linux systems and in Linux environments without a
 // configured CPU quota.
 func Set(opts ...Option) (func(), error) {
-	cfg := &config{
-		procs:          iruntime.CPUQuotaToGOMAXPROCS,
-		roundQuotaFunc: iruntime.DefaultRoundFunc,
-		minGOMAXPROCS:  1,
-	}
-	for _, o := range opts {
-		o.apply(cfg)
-	}
+	cfg := newConfig(opts)
 
 	undoNoop := func() {
 		cfg.log("maxprocs: No GOMAXPROCS change to reset")
